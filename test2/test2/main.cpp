@@ -23,6 +23,35 @@ enum nachylenie{
 				ujemne = 2,
 			};
 
+void Ocena(std::vector<cv::DMatch> matches, std::vector<cv::KeyPoint> keypointsl, std::vector<cv::KeyPoint> keypointsr){
+
+	std::vector<cv::DMatch>::iterator itDM = matches.begin();
+	std::vector<double> odleglosci;
+	std::vector<nachylenie> vnachyl;
+	
+	std::cout << "\nParametry kolejnych par: " << std::endl;
+	for (int i = 0; i < matches.size(); i++){
+		double dlug;
+		cv::Point left = keypointsl.at(itDM->queryIdx).pt;
+		cv::Point right = keypointsr.at(itDM->trainIdx).pt;
+		dlug = sqrt(double(double(left.x-right.x)*double(left.x-right.x)) + double(double(left.y-right.y)*double(left.y-right.y))  );
+		odleglosci.push_back(dlug);
+		if (left.y < right.y){
+			vnachyl.push_back(dodatnie);
+			std::cout << i << ": Dlugosc: " << dlug << ", wspolczynnik a =  dodatnie" << std::endl;
+		}
+		else if (left.y == right.y){
+			vnachyl.push_back(brak);
+			std::cout << i << ": Dlugosc: " << dlug << ", wspolczynnik a =  0" << std::endl;
+		}
+		else{
+			vnachyl.push_back(ujemne);
+			std::cout << i << ": Dlugosc: " << dlug << ", wspolczynnik a =  ujemne" << std::endl;
+		}
+		itDM++;
+	}
+}
+
 void Filtrowanie (std::vector<int> pointIndexesLeft, std::vector<int> pointIndexesRight, 
 							std::vector<cv::KeyPoint> keypointsl, std::vector<cv::KeyPoint> keypointsr,
 							std::vector<cv::DMatch> matches, cv::Mat imagel, cv::Mat imager){
@@ -34,34 +63,7 @@ void Filtrowanie (std::vector<int> pointIndexesLeft, std::vector<int> pointIndex
 				cv::Mat imageMatchesPrzed, imageMatchesPo;
 				std::vector<cv::DMatch> matchesPrawidlowe;
 
-				int n = 0;
-				std::cout << "\nParametry kolejnych par: " << std::endl;
-				for (int i = 0; i < pointIndexesLeft.size(); i++){
-
-					double dlug;
-					cv::Point left;
-					cv::Point right;
-					left = keypointsl.at(*itl).pt;
-					right = keypointsr.at(*itr).pt;
-					dlug = sqrt(double(double(left.x-right.x)*double(left.x-right.x)) + double(double(left.y-right.y)*double(left.y-right.y))  );
-					odleglosci.push_back(dlug);
-					if (left.y < right.y){
-						vnachyl.push_back(dodatnie);
-						std::cout << n << ": Dlugosc: " << dlug << ", wspolczynnik a =  dodatnie" << std::endl;
-					}
-					else if (left.y == right.y){
-						vnachyl.push_back(brak);
-						std::cout << n << ": Dlugosc: " << dlug << ", wspolczynnik a =  0" << std::endl;
-					}
-					else{
-						vnachyl.push_back(ujemne);
-						std::cout << n << ": Dlugosc: " << dlug << ", wspolczynnik a =  ujemne" << std::endl;
-					}
-					
-					n++;
-					itl++;
-					itr++;
-				}
+				Ocena(matches,keypointsl, keypointsr);
 
 				//Wyliczenie mediany odleglosci laczacych punkty charakterystyczne oraz wspó³czynniki nachylenia tych prostych
 				double mOdleglosc = mediana(odleglosci);
