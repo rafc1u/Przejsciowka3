@@ -13,6 +13,9 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include "opencv2/calib3d/calib3d.hpp"
 
+#define PI 3.14159265
+#define ka PI/180
+
 template <class type>
 type mediana(std::vector<type> &v);
 
@@ -23,11 +26,10 @@ enum nachylenie{
 				ujemne = 2,
 			};
 
-void Ocena(std::vector<cv::DMatch> matches, std::vector<cv::KeyPoint> keypointsl, std::vector<cv::KeyPoint> keypointsr){
+void Ocena(std::vector<cv::DMatch> matches, std::vector<cv::KeyPoint> keypointsl, std::vector<cv::KeyPoint> keypointsr, std::vector<double> *odleglosci, std::vector<nachylenie> *vnachyl){
 
 	std::vector<cv::DMatch>::iterator itDM = matches.begin();
-	std::vector<double> odleglosci;
-	std::vector<nachylenie> vnachyl;
+	
 	
 	std::cout << "\nParametry kolejnych par: " << std::endl;
 	for (int i = 0; i < matches.size(); i++){
@@ -35,6 +37,38 @@ void Ocena(std::vector<cv::DMatch> matches, std::vector<cv::KeyPoint> keypointsl
 		cv::Point left = keypointsl.at(itDM->queryIdx).pt;
 		cv::Point right = keypointsr.at(itDM->trainIdx).pt;
 		dlug = sqrt(double(double(left.x-right.x)*double(left.x-right.x)) + double(double(left.y-right.y)*double(left.y-right.y))  );
+		//*odleglosci.push_back(dlug);
+		odleglosci->push_back(dlug);
+		if (left.y < right.y){
+			vnachyl->push_back(dodatnie);
+			std::cout << i << ": Dlugosc: " << dlug << ", wspolczynnik a =  dodatnie" << std::endl;
+		}
+		else if (left.y == right.y){
+			vnachyl->push_back(brak);
+			std::cout << i << ": Dlugosc: " << dlug << ", wspolczynnik a =  0" << std::endl;
+		}
+		else{
+			vnachyl->push_back(ujemne);
+			std::cout << i << ": Dlugosc: " << dlug << ", wspolczynnik a =  ujemne" << std::endl;
+		}
+		itDM++;
+	}
+
+}
+
+void Ocena(std::vector<cv::DMatch> matches, std::vector<cv::KeyPoint> keypointsl, std::vector<cv::KeyPoint> keypointsr){
+
+	std::vector<cv::DMatch>::iterator itDM = matches.begin();
+	std::vector<double> odleglosci;
+	std::vector<nachylenie> vnachyl;
+	
+	std::cout << "Parametry kolejnych par: " << std::endl;
+	for (int i = 0; i < matches.size(); i++){
+		double dlug;
+		cv::Point left = keypointsl.at(itDM->queryIdx).pt;
+		cv::Point right = keypointsr.at(itDM->trainIdx).pt;
+		dlug = sqrt(double(double(left.x-right.x)*double(left.x-right.x)) + double(double(left.y-right.y)*double(left.y-right.y))  );
+		//*odleglosci.push_back(dlug);
 		odleglosci.push_back(dlug);
 		if (left.y < right.y){
 			vnachyl.push_back(dodatnie);
@@ -50,25 +84,29 @@ void Ocena(std::vector<cv::DMatch> matches, std::vector<cv::KeyPoint> keypointsl
 		}
 		itDM++;
 	}
+
 }
 
-void Filtrowanie (std::vector<int> pointIndexesLeft, std::vector<int> pointIndexesRight, 
-							std::vector<cv::KeyPoint> keypointsl, std::vector<cv::KeyPoint> keypointsr,
-							std::vector<cv::DMatch> matches, cv::Mat imagel, cv::Mat imager){
+std::vector<cv::DMatch> Filtrowanie (std::vector<cv::KeyPoint> keypointsl, std::vector<cv::KeyPoint> keypointsr,
+				  std::vector<cv::DMatch> *matches, cv::Mat imagel, cv::Mat imager){
 
-				std::vector<int>::const_iterator itl = pointIndexesLeft.begin();
-				std::vector<int>::const_iterator itr = pointIndexesRight.begin();
-				std::vector<double> odleglosci;
+				//std::vector<int>::const_iterator itl = pointIndexesLeft.begin();
+				//std::vector<int>::const_iterator itr = pointIndexesRight.begin();
+				//Zamiast pointIndexes left i right uzywamy itDM
+				std::vector<cv::DMatch>::iterator itDM;
+				std::vector<double> odleglosci, odleglosci2;
 				std::vector<nachylenie> vnachyl;
 				cv::Mat imageMatchesPrzed, imageMatchesPo;
 				std::vector<cv::DMatch> matchesPrawidlowe;
 
-				Ocena(matches,keypointsl, keypointsr);
-
+				Ocena(*matches, keypointsl, keypointsr, &odleglosci, &vnachyl);
+				itDM = matches->begin();
+				std::vector<double> tmp_odleglosci(odleglosci);
+				std::vector<nachylenie> tmp_vnachyl(vnachyl);
 				//Wyliczenie mediany odleglosci laczacych punkty charakterystyczne oraz wsp馧czynniki nachylenia tych prostych
-				double mOdleglosc = mediana(odleglosci);
+				double mOdleglosc = mediana(tmp_odleglosci);
 				std::cout << "Mediana odleglosci punktow char. = " << mOdleglosc << std::endl;
-				nachylenie mNachylenie = mediana(vnachyl);
+				nachylenie mNachylenie = mediana(tmp_vnachyl);
 				if (mNachylenie == dodatnie){
 					std::cout << "Mediana nachylen jest dodatnia" << std::endl;
 				}
@@ -79,15 +117,15 @@ void Filtrowanie (std::vector<int> pointIndexesLeft, std::vector<int> pointIndex
 					std::cout << "Mediana nachylen jest rowna 0" << std::endl;
 
 				}
-
+				
 				
 				// rysowanie DOPASOWAN PRZED FILTRACJA
-				cv::drawMatches(imagel,keypointsl,imager, keypointsr, matches, imageMatchesPrzed);
-				cv::imshow("Przed filtracja", imageMatchesPrzed);
+				cv::drawMatches(imagel,keypointsl,imager, keypointsr, *matches, imageMatchesPrzed);
+				cv::imshow("Before Filtration", imageMatchesPrzed);
 
 				//Proces odfiltrowania
-				itl = pointIndexesLeft.begin();
-				itr = pointIndexesRight.begin();
+				//itl = pointIndexesLeft.begin();
+				//itr = pointIndexesRight.begin();
 				
 
 				std::vector<double>::iterator itOdl = odleglosci.begin();
@@ -95,23 +133,28 @@ void Filtrowanie (std::vector<int> pointIndexesLeft, std::vector<int> pointIndex
 
 				for ( int i = 0; i < odleglosci.size(); i ++ ){
 
-					if (*itOdl == mOdleglosc && *itNach == mNachylenie){
-						
+					// dla przypadku idealnego przesuniecia
+					//if (*itOdl == mOdleglosc && *itNach == mNachylenie){
+					//dla przypadku bardziej ogolnego niz wyzej
+					if (*itOdl > ( mOdleglosc - 15.0) && (*itOdl < ( mOdleglosc + 15.0)) && *itNach == mNachylenie){
+
 						cv::DMatch dmatch;
-						dmatch.queryIdx = *itl;
-						dmatch.trainIdx = *itr;
+						dmatch.queryIdx = itDM->queryIdx;
+						dmatch.trainIdx = itDM->trainIdx;
 						matchesPrawidlowe.push_back(dmatch);
 						
 					}
 
 					itOdl++;
 					itNach++;
-					itl++;
-					itr++;
+					itDM++;
 				}
 				// rysowanie DOPASOWAN Po FILTRACJI
 				cv::drawMatches(imagel,keypointsl,imager, keypointsr, matchesPrawidlowe, imageMatchesPo);
-				cv::imshow("Pofiltracja", imageMatchesPo);
+				cv::imshow("After Filtration", imageMatchesPo);
+
+				Ocena(matchesPrawidlowe,keypointsl, keypointsr, &odleglosci2, &vnachyl);
+				return matchesPrawidlowe;
 }
 
 
@@ -170,7 +213,7 @@ int main(){
 
 
 	cv:: Mat zdjl, zdjr, imagel, imager, outImgl, outImgr, matchess, matchess2;
-	int wartSlider = 18000; //28000 uzywac
+	int wartSlider = 18000; //18000 uzywac
 	std::vector<cv::KeyPoint> keypointsl, keypointsr;;
 
 	cv::SurfDescriptorExtractor surfDesc;
@@ -182,16 +225,64 @@ int main(){
 	//zdjl = cv::imread("C:\\Users\\kkk\\Documents\\Visual Studio 2010\\Projects\\HelloGUIWorld2\\Win32\\Debug\\lewa00.jpg", CV_LOAD_IMAGE_COLOR );
 	//zdjr = cv::imread("C:\\Users\\kkk\\Documents\\Visual Studio 2010\\Projects\\HelloGUIWorld2\\Win32\\Debug\\prawa00.jpg", CV_LOAD_IMAGE_COLOR );
 
-	zdjl = cv::imread("C:\\Users\\kkk\\Desktop\\leftp2.jpg", CV_LOAD_IMAGE_COLOR );
-	zdjr = cv::imread("C:\\Users\\kkk\\Desktop\\rightp2.jpg", CV_LOAD_IMAGE_COLOR );
+	zdjl = cv::imread("C:\\Users\\Rafa許\Desktop\\mgr_obrazki\\leftp2.jpg", CV_LOAD_IMAGE_COLOR );
+	zdjr = cv::imread("C:\\Users\\Rafa許\Desktop\\mgr_obrazki\\rightp2.jpg", CV_LOAD_IMAGE_COLOR );
 
-	zdjl = cv::imread("C:\\Users\\kkk\\Desktop\\dol.jpg", CV_LOAD_IMAGE_COLOR );
-	zdjr = cv::imread("C:\\Users\\kkk\\Desktop\\gora.jpg", CV_LOAD_IMAGE_COLOR );
+	//zdjl = cv::imread("C:\\Users\\Rafa許\Desktop\\mgr_obrazki\\\dol.jpg", CV_LOAD_IMAGE_COLOR );
+	//zdjr = cv::imread("C:\\Users\\Rafa許\Desktop\\mgr_obrazki\\dol.jpg", CV_LOAD_IMAGE_COLOR );
+	
+	
 
+	float tabRot[2][2] = {{cos(ka*45), sin(ka*45)},{-sin(ka*45), cos(ka*45)}};
+	cv::Mat matRot(2,2, CV_32F, tabRot);
+
+	float tabTr[2][2] = {{1,0},{0,1}};
+	cv::Mat matTr(2,2, CV_32F, tabTr);
+
+	cv::Mat matZlozenia = matRot*matTr;
+	//std::cout << "Mac zlozenia:\n" << matZlozenia << std::endl;
+
+	const int wys = 300;
+	const int szer = 400;
+	//zamalowanie obrazu na bialo
+	float tabZdj[wys][szer];
+	float tabZdj2[wys][szer];
+	for (int i = 0; i < wys; i++){
+		for (int j = 0; j < szer; j++){
+			tabZdj[i][j] = 255;
+			tabZdj2[i][j] = 255;
+		}
+	}
+
+	
+	for (int i = 0; i < (wys - 30); i += 20){
+		for (int j = 0; j < (szer - 30); j += 20){
+			tabZdj[i][j] = 0;
+			int x = i;
+			int y = j;
+			double xp = matZlozenia.at<float>(0,0)*x+ matZlozenia.at<float>(0,1)*y;
+			double yp = matZlozenia.at<float>(1,0)*x+ matZlozenia.at<float>(1,1)*y;
+			if (   (  ((int)xp >= 0) && (int)xp < szer   ) && ((int)yp >=0 && (int)yp< wys) ){
+				tabZdj2[(int)xp][(int)yp] = 0;	
+			}
+		}
+	}
+
+	cv::Mat matZdjl(300,400, CV_32F, tabZdj);
+
+	cv::Mat matZdjr(300,400, CV_32F, tabZdj2);
+	
+
+
+	float transformMatrix[3][3] = {{cos(ka*45),sin(ka*45),-150},{-sin(ka*45),cos(ka*45),100},{0,0,1}};
+	cv::Mat M(3,3, CV_32F, transformMatrix);
+	//std::cout <<M<<std::endl;
+	//cv::warpPerspective(zdjl,zdjr, M, zdjl.size());
+	
 	while(cv::waitKey(10) != 27){
-		imshow("left", zdjl);
-		imshow("right", zdjr);
-
+		//imshow("left", zdjl);
+		//imshow("right", zdjr);
+	
 
 
 		zdjl.copyTo(imagel);
@@ -206,148 +297,74 @@ int main(){
 		drawKeypoints(imagel, keypointsl, outImgl, cv::Scalar(255,255,255), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
 		drawKeypoints(imager, keypointsr, outImgr, cv::Scalar(255,255,255), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
 
-		imshow("Detected left", outImgl);
-		imshow("Detected right", outImgr);
-
+		
+		//while(true){
+		//	imshow("Detected left", outImgl);
+		//	imshow("Detected right", outImgr);
+		//	imshow("matZdjl", zdjl);
+		//	imshow("matZdjr", zdjr);
+		//	cv::waitKey(10);
+		//}
+		
 
 		surfDesc.compute(imagel, keypointsl, descriptorsl);
 		surfDesc.compute(imager, keypointsr, descriptorsr);
 
 		cv::BruteForceMatcher<cv::L2<float>> matcher;
-		std::vector<cv::DMatch> matches;
+		std::vector<cv::DMatch> matches, matchesPrawidlowe;
 		matcher.match(descriptorsl, descriptorsr, matches);
 		
-		
-		
-		
-
 		std::vector<int> pointIndexesLeft;
 		std::vector<int> pointIndexesRight;
 		
-		for (std::vector<cv::DMatch>::const_iterator it= matches.begin(); it!= matches.end(); ++it) {
-
-				 // Get the indexes of the selected matched keypoints
-				 pointIndexesLeft.push_back(it->queryIdx);
-				 pointIndexesRight.push_back(it->trainIdx);
-		}
-
-
+		
 		//iteracja po wektorach - obliczanie odleglosci euklidesowej miedzy x,y pointIndexLeft a x,y pointIndexesRight. NAstepnie mediana i weryfikacja czy otrzymane pary maja mediane odl euk. +-1
 		// z wektora keypointa o adresie wskazywanym przez iterator left or right pobieramy pt - czyli x oraz y
 		std::vector<int>::const_iterator itl = pointIndexesLeft.begin();
 		std::vector<int>::const_iterator itr = pointIndexesRight.begin();
-		//wektory odl_eu - powinno byc ze to wektor wspolczynnikow a nachylen prostych
-		//wektor old_y - 
-		std::vector<double> odl_eu;
-
-		//kopie pointindexes
-		std::vector<int> pointIndexesLeft2 (pointIndexesLeft);
-		std::vector<int> pointIndexesRight2 (pointIndexesRight);
-
-		//kopie keypoint's
-		std::vector<cv::KeyPoint> keypointsl2 (keypointsl);
-		std::vector<cv::KeyPoint> keypointsr2 (keypointsr);
+	
 
 
-		//kopia matches
-		std::vector<cv::DMatch> matches2(matches);
-		//pomocnicza zmienna zeby nastepowalo przesuniecie gdy usuwamy z listy wektorow
-			int pp = 0;
-
-			enum nachylenie{
-			
-				brak = 0,
-				dodatnie = 1,
-				ujemne = 2,
-			};
-
-			std::vector<nachylenie> vnachyl;	
-			//BLAD- przeciez keypointy lewe i prawe powinny byc brane z DMatch! a nie po koleji!
-			//Napisaac Funkcje filtrowanie(pointIndexesLeft, pointIndexesRight, keyointsl, keypointsr)
-
-			
-
-		/*
-		//filtrowanie
-		for (int i = 0; i < pointIndexesLeft.size(); i++){
-
-			double wynik;
-			cv::Point left;
-			cv::Point right;
-			int abc = *itl;
-			left = keypointsl.at(*itl).pt;
-			right = keypointsr.at(*itr).pt;
-			// to liczenie powoduje blad przy dziel przez 0
-			wynik = tan( (double) (double(left.y-right.y)/(double(left.x-right.x)) ) );
-			//uzywac tego
-			wynik = sqrt(double(double(left.x-right.x)*double(left.x-right.x))+double(double(left.y-right.y)*double(left.y-right.y))  );
-			odl_eu.push_back( wynik );
-			if (left.y < right.y){
-				vnachyl.push_back(dodatnie);
-			}
-			else if (left.y == right.y){
-				vnachyl.push_back(brak);	
-			}
-			else{
-				vnachyl.push_back(ujemne);
-			}
-
-
-			
-			//wyrzucenie POWINNA BYC MEDIANA
-			if (wynik != 0 ){
-				matches2.erase(matches2.begin()+i-pp);
-				pointIndexesLeft2.erase(pointIndexesLeft2.begin() + i-pp);
-				pointIndexesRight2.erase(pointIndexesRight2.begin() + i-pp);
-				//czy napewno?
-				//keypointsl2.erase(keypointsl2.begin() + i);
-				//keypointsr2.erase(keypointsr2.begin() + i);
-				pp++;
-			} 
-			 itr++;
-			 itl++;
-		}
-		int xyxx;
-		nachylenie medNachylenia = mediana(vnachyl);
-
-		int mediana = median(odl_eu);
-		pp = 0;
-		for (int i = 0; i < odl_eu.size(); i++){
-			
-			//wyrzucenie POWINNA BYC MEDIANA
-			if (odl_eu.at(i) != mediana || vnachyl.at(i) != medNachylenia){
-				int wyp = i-pp;
-				matches2.erase(matches2.begin()+wyp);
-				//pointIndexesLeft2.erase(pointIndexesLeft2.begin() + wyp);
-				//pointIndexesRight2.erase(pointIndexesRight2.begin() + wyp);
-				//czy napewno?
-				//keypointsl2.erase(keypointsl2.begin() + i);
-				//keypointsr2.erase(keypointsr2.begin() + i);
-				pp++;
-			}
-
-		}
-
-		*/
-		Filtrowanie(pointIndexesLeft, pointIndexesRight, keypointsl, keypointsr, matches, imagel, imager);
-
-		
-
-
+		//Filtrowanie
+		matchesPrawidlowe = Filtrowanie(keypointsl, keypointsr, &matches, imagel, imager);
+		matchesPrawidlowe = matches;
+		std::cout << "Poza funkcja filtracji:" << std::endl;
+		Ocena(matchesPrawidlowe,keypointsl, keypointsr);
 		//pointIndexes - przypisanie poprawnych
-			pointIndexesLeft = pointIndexesLeft2;
-			pointIndexesRight = pointIndexesRight2;
+		for (std::vector<cv::DMatch>::iterator it = matchesPrawidlowe.begin(); it < matchesPrawidlowe.end(); it++){
+			pointIndexesLeft.push_back(it->queryIdx );
+			pointIndexesRight.push_back(it->trainIdx );
+		}
 
 		// Convert keypoints into Point2f
-			std::vector<cv::Point2f> selPointsLeft, selPointsRight, vectest;
+			std::vector<cv::Point2f> selPointsLeft, selPointsRight;
 			
 			cv::KeyPoint::convert(keypointsl,selPointsLeft,pointIndexesLeft);
 			cv::KeyPoint::convert(keypointsr,selPointsRight,pointIndexesRight);
+			
+			/*
+			//Czyszczenie selPoints'ow
+			selPointsLeft.clear();
+			selPointsRight.clear();
 
 			
-			// rysowanie DOPASOWAN
-			cv::drawMatches(imagel,keypointsl,imager, keypointsr, matches2, matchess);
-			//imshow("Po filtracji", matchess);
+			for (int i = 0; i < 200; i+=10){
+
+				cv::Point2f pktP(i,i+40);
+				float tabTransformMatrix[3][3] = { {cos(45*ka), sin(45*ka), -150},{-sin(45*ka), cos(45*ka), 100},{0,0,1} };
+				cv::Mat matTransformMatrix(3,3, CV_32F, tabTransformMatrix);
+				float pktDx = cos(45*ka)*pktP.x + sin(45*ka)*pktP.y - 150;
+				float pktDy = -sin(45*ka)*pktP.x + cos(45*ka)*pktP.y + 100;
+				int pktDxi = (int)pktDx;
+				int pktDyi = (int)pktDy;
+				cv::Point2f pktD(pktDxi,pktDyi);
+
+				if (pktD.x > 0 && pktD.y > 0){
+					selPointsLeft.push_back(pktP);
+					selPointsRight.push_back(pktD);
+				}
+			}
+			*/
 
 			// rysowanie DOPASOWAN
 			//cv::drawMatches(imagel,keypointsl,imager, keypointsr, matches2, matchess);
@@ -358,11 +375,18 @@ int main(){
             cv::Mat(selPointsLeft), // points in first image
             cv::Mat(selPointsRight), // points in second image
             CV_FM_RANSAC);       // 8-point method
-			std::cout << "fundemental" << fundemental << std::endl;
+			std::cout << "\nfundemental\n" << fundemental << std::endl;
 			cv::Mat l_prim;
 			//l_prim = fundemental*
 			
+
+			//wyzncznik
+			double wyznFund = cv::determinant(fundemental);
+			std::cout << " Wyznacnzik fundamanetal matrix = " << wyznFund << std::endl;
+
+
 			//sprawdzenie wg wzoru 11.2 ze strony 279 z MVG
+			std::cout << "Checking the correctness (should be 0) " << std::endl;
 			for (int i = 0; i < selPointsRight.size(); i ++){
 
 				cv::Point2f xy = selPointsLeft.at(i);
@@ -386,6 +410,9 @@ int main(){
 			}
 			//cv::SVD svd(fundemental,cv::SVD::MODIFY_A);
 			cv::SVD svd(fundemental);
+			std::cout << std::endl<< "SVD_U " << svd.u << std::endl;
+			std::cout << std::endl<< "SVD_VT " << svd.vt << std::endl;
+			std::cout << std::endl<< "SVD_W " << svd.w << std::endl;
 			cv::Mat svd_u = svd.u;
 			cv::Mat svd_vt = svd.vt;
 			cv::Mat svd_w = svd.w;
@@ -403,11 +430,13 @@ int main(){
 
 			std::cout << std::endl<< "R " << R << std::endl;
 			std::cout << std::endl<< "R2 " << R2 << std::endl;
-			std::cout << "t " << t << std::endl;
+			std::cout << "\nt " << t << std::endl;
+			std::cout << "\nMacierz u z ktorej bierze sie t \n" << svd_u << std::endl;
 
-
-			cv::Mat(H1);
+			cv::Mat H1 = cv::findHomography(selPointsLeft, selPointsRight, 0);
+			std::cout << "\n H1:\n" << H1 << std::endl;
 			cv::Mat(H2);
+			std::cout << "\n H2:\n" << H2 << std::endl;
 
 			cv::stereoRectifyUncalibrated(selPointsLeft, selPointsRight, fundemental, imagel.size(), H1,H2);
 
