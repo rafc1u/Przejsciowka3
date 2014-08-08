@@ -172,48 +172,14 @@ std::vector<cv::DMatch> Filtrowanie (std::vector<cv::KeyPoint> keypointsl, std::
 	}
 
 
-	cv::Mat konwersjaZHomo(cv::Mat wej){
-		//int typ = wej.type();
-		const int rows = wej.rows;
-		const int cols = wej.cols;
 
-		//float tmp[wejRows][wejCols];
-
-		//allocate the array
-		//float** arr = new float*[rows -1];
-		//	for(int i = 0; i < rows-1; i++)
-		//	arr[i] = new float[cols];
-
-
-		float arr[3][7];
-		for (int i = 0; i < cols; i++ ){
-
-			for (int j =0; j < rows -1; j++ ){
-
-				float a = wej.at<float>(j,i) / wej.at<float>(rows-1, i);
-			//	std::cout << "kolumna: " << i << " linia: " << j << "Dzielenie: " << wej.at<float>(j,i) << " / " << wej.at<float>(rows-1, i) << std::endl;
-				arr[j][i] = a;
-			//	std::cout<< " = " << arr[j][i] << std::endl;
-			}
-		}
-
-		cv::Mat wynik(rows -1,cols, CV_32FC1, arr);
-		std::cout << "wynikowa z fkc " << wynik << std::endl;
-
-		//deallocate the array
-		//for(int i = 0; i < rows -1 ; i++)
-		//	 delete[] arr[i];
-		//	 delete[] arr;
-
-		return wynik;
-	}
 
 
 int main(){
 
 
 	cv:: Mat zdjl, zdjr, imagel, imager, outImgl, outImgr, matchess, matchess2;
-	int wartSlider = 18000; //18000 uzywac
+	int wartSlider = 15000; //18000 uzywac
 	std::vector<cv::KeyPoint> keypointsl, keypointsr;;
 
 	cv::SurfDescriptorExtractor surfDesc;
@@ -228,8 +194,8 @@ int main(){
 	zdjl = cv::imread("C:\\Users\\Rafa許\Desktop\\mgr_obrazki\\leftp2.jpg", CV_LOAD_IMAGE_COLOR );
 	zdjr = cv::imread("C:\\Users\\Rafa許\Desktop\\mgr_obrazki\\rightp2.jpg", CV_LOAD_IMAGE_COLOR );
 
-	//zdjl = cv::imread("C:\\Users\\Rafa許\Desktop\\mgr_obrazki\\\dol.jpg", CV_LOAD_IMAGE_COLOR );
-	//zdjr = cv::imread("C:\\Users\\Rafa許\Desktop\\mgr_obrazki\\dol.jpg", CV_LOAD_IMAGE_COLOR );
+	zdjl = cv::imread("C:\\Users\\Rafa許\Desktop\\mgr_obrazki\\dol.jpg", CV_LOAD_IMAGE_COLOR ); //
+	zdjr = cv::imread("C:\\Users\\Rafa許\Desktop\\mgr_obrazki\\dol3.jpg", CV_LOAD_IMAGE_COLOR );// przesuniecie, obrot zmiana skali
 	
 	
 
@@ -297,41 +263,58 @@ int main(){
 		drawKeypoints(imagel, keypointsl, outImgl, cv::Scalar(255,255,255), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
 		drawKeypoints(imager, keypointsr, outImgr, cv::Scalar(255,255,255), cv::DrawMatchesFlags::DRAW_RICH_KEYPOINTS);
 
-		
-		//while(true){
-		//	imshow("Detected left", outImgl);
-		//	imshow("Detected right", outImgr);
-		//	imshow("matZdjl", zdjl);
-		//	imshow("matZdjr", zdjr);
-		//	cv::waitKey(10);
-		//}
-		
 
 		surfDesc.compute(imagel, keypointsl, descriptorsl);
 		surfDesc.compute(imager, keypointsr, descriptorsr);
 
 		cv::BruteForceMatcher<cv::L2<float>> matcher;
-		std::vector<cv::DMatch> matches, matchesPrawidlowe;
+		std::vector<cv::DMatch> matches, matchesPrawidlowe, knnMatchesPrawidlowe;
+		std::vector<std::vector<cv::DMatch>> knnMatches;
+
+		matcher.knnMatch(descriptorsl, descriptorsr, knnMatches, 2);
 		matcher.match(descriptorsl, descriptorsr, matches);
 		
+		// knn warunek na distance
+
+		for (std::vector<std::vector<cv::DMatch>>::iterator it = knnMatches.begin(); it != knnMatches.end(); it++){
+			//for ( std::vector<cv::DMatch>::iterator it2 = it->begin(); it2 != it->end() ; it2++){
+			//	std::cout << it2->distance << "\n" << std::endl;
+			//}
+			std::vector<cv::DMatch>::iterator it2 = it->begin();
+			cv::DMatch tmpDMatch;
+			double dist1 = -1;
+			double dist2 = -1;
+			dist1 = it2->distance;
+			it2++;
+			dist2 = it2->distance;
+			it2--;
+
+			if(dist1 < 0.65*dist2){
+				tmpDMatch.queryIdx = it2->queryIdx;
+				tmpDMatch.trainIdx = it2->trainIdx;
+				knnMatchesPrawidlowe.push_back(tmpDMatch);
+			}else{
+			//	std::cout<<"zle dopas"<<std::endl;
+			}
+			
+			
+		}
+		cv:: Mat knnimgmatches;
+		cv:: drawMatches(imagel,keypointsl,imager, keypointsr, knnMatchesPrawidlowe, knnimgmatches);
+		imshow("Matches from distance condition ", knnimgmatches);
+
+
+
 		std::vector<int> pointIndexesLeft;
 		std::vector<int> pointIndexesRight;
-		
-		
-		//iteracja po wektorach - obliczanie odleglosci euklidesowej miedzy x,y pointIndexLeft a x,y pointIndexesRight. NAstepnie mediana i weryfikacja czy otrzymane pary maja mediane odl euk. +-1
-		// z wektora keypointa o adresie wskazywanym przez iterator left or right pobieramy pt - czyli x oraz y
-		std::vector<int>::const_iterator itl = pointIndexesLeft.begin();
-		std::vector<int>::const_iterator itr = pointIndexesRight.begin();
-	
-
 
 		//Filtrowanie
-		matchesPrawidlowe = Filtrowanie(keypointsl, keypointsr, &matches, imagel, imager);
-		matchesPrawidlowe = matches;
+		//matchesPrawidlowe = Filtrowanie(keypointsl, keypointsr, &matches, imagel, imager);
+		//2matchesPrawidlowe = matches;
 		std::cout << "Poza funkcja filtracji:" << std::endl;
-		Ocena(matchesPrawidlowe,keypointsl, keypointsr);
+		//Ocena(matchesPrawidlowe,keypointsl, keypointsr);
 		//pointIndexes - przypisanie poprawnych
-		for (std::vector<cv::DMatch>::iterator it = matchesPrawidlowe.begin(); it < matchesPrawidlowe.end(); it++){
+		for (std::vector<cv::DMatch>::iterator it = knnMatchesPrawidlowe.begin(); it < knnMatchesPrawidlowe.end(); it++){
 			pointIndexesLeft.push_back(it->queryIdx );
 			pointIndexesRight.push_back(it->trainIdx );
 		}
@@ -342,34 +325,7 @@ int main(){
 			cv::KeyPoint::convert(keypointsl,selPointsLeft,pointIndexesLeft);
 			cv::KeyPoint::convert(keypointsr,selPointsRight,pointIndexesRight);
 			
-			/*
-			//Czyszczenie selPoints'ow
-			selPointsLeft.clear();
-			selPointsRight.clear();
-
 			
-			for (int i = 0; i < 200; i+=10){
-
-				cv::Point2f pktP(i,i+40);
-				float tabTransformMatrix[3][3] = { {cos(45*ka), sin(45*ka), -150},{-sin(45*ka), cos(45*ka), 100},{0,0,1} };
-				cv::Mat matTransformMatrix(3,3, CV_32F, tabTransformMatrix);
-				float pktDx = cos(45*ka)*pktP.x + sin(45*ka)*pktP.y - 150;
-				float pktDy = -sin(45*ka)*pktP.x + cos(45*ka)*pktP.y + 100;
-				int pktDxi = (int)pktDx;
-				int pktDyi = (int)pktDy;
-				cv::Point2f pktD(pktDxi,pktDyi);
-
-				if (pktD.x > 0 && pktD.y > 0){
-					selPointsLeft.push_back(pktP);
-					selPointsRight.push_back(pktD);
-				}
-			}
-			*/
-
-			// rysowanie DOPASOWAN
-			//cv::drawMatches(imagel,keypointsl,imager, keypointsr, matches2, matchess);
-			//imshow("Matches with correct function", matchess2);
-
 			//Wyliczenie macierzy fundemental
 			cv::Mat fundemental= cv::findFundamentalMat(
             cv::Mat(selPointsLeft), // points in first image
@@ -438,7 +394,7 @@ int main(){
 			cv::Mat(H2);
 			std::cout << "\n H2:\n" << H2 << std::endl;
 
-			cv::stereoRectifyUncalibrated(selPointsLeft, selPointsRight, fundemental, imagel.size(), H1,H2);
+			//cv::stereoRectifyUncalibrated(selPointsLeft, selPointsRight, fundemental, imagel.size(), H1,H2);
 
 			cv::Mat  w, u, vt, v;
 			cv::SVD::compute(fundemental, w, u, vt);	
